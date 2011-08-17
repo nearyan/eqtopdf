@@ -1,0 +1,88 @@
+#!/usr/bin/python
+
+# eqtopdf
+#
+# Copyright 2011 Sietse Ringers
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program (see LISENCE.txt).  If not, see
+# <http://www.gnu.org/licenses/>.
+
+import sys
+import os
+import fileinput
+from optparse import OptionParser
+
+usage = """Usage: %prog [options] arg1 [arg2 [...]]
+
+Convert LaTeX equations to actual equations, contained in a cropped PDF
+file. For each of the arguments, check wether it is a file. If so, 
+interpret the contents as a LaTeX equation, and compile it to a cropped
+PDF file. If it is not a file, interpret the argument itself as a LaTeX
+expression, and do the same. Requires
+http://ctan.org/tex-archive/support/pdfcrop."""
+
+parser = OptionParser(usage=usage)
+parser.add_option('-m', '--margin', dest='margin', type='int', default=0, \
+				  help="The margin around the equation. Defaults to 0.")
+parser.add_option('-p', '--preamble', dest='preamble', type='string', \
+				  help="The preamble file to use. Defaults to ./preamble if it exists, or /usr/local/share/eqtopdf/preamble when ./preamble does not exist. Note that the preamble should create a page that is, apart from the equation, completely empty, and no equation number should be produced. It should have '\%s' at the point where the LaTeX is to be inserted, in some math mode environment.")
+parser.add_option('-c', '--pdfcrop', dest='pdfcrop', type='string', default="pdfcrop", \
+				  help="Path to the pdfcrop executable. If not given, the program just looks up 'pdfcrop' in $PATH.")
+(options, args) = parser.parse_args()
+
+
+if options.preamble == None:
+	if os.path.exists("preamble"):
+		options.preamble = "preamble"
+	else:
+		options.preamble = "/usr/local/share/eqtopdf/preamble"
+s = open(options.preamble, 'r')
+preamble = s.read()
+s.close()
+
+if len(args) == 0:
+	parser.print_help()
+
+for arg in args:
+	filename = ''
+	# If the argument refers to an existing file, read it, and if the filename is of the form
+	# file.tex, create file.pdf output. Otherwise just append .pdf to it for the output PDF.
+	if os.path.exists(arg):
+		s = open(arg, 'r')
+		tex = s.read()
+		s.close()
+		parts = arg.rpartition('.')
+		if parts[2] == 'tex':
+			filename = parts[0]
+		else:
+			filename = arg
+	# If the argument does not refer to an existing file, interpret the argument itself as
+	# LaTeX.
+	else:
+		tex = arg
+		filename = 'input'
+
+	# Create temporary tex file, insert the preamble and LaTeX code
+	texfile = open('temp.tex', 'w')
+	texfile.write(preamble % tex.strip())
+	texfile.close()
+
+	# Do the work: convert to PDF and crop
+	os.system('pdflatex -interaction=nonstopmode temp.tex')
+	os.system('%s --margins %d temp.pdf "%s.pdf"' % (options.pdfcrop, options.margin, filename))
+
+	# Clean up: delete temporary files
+	os.remove('temp.tex')
+	os.remove('temp.pdf')
+	os.remove('temp.log')
+	os.remove('temp.aux')
